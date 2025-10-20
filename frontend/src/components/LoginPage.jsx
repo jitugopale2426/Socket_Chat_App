@@ -54,7 +54,7 @@ const LoginPage = () => {
                     <button type='submit' className='border border-gray-500 rounded-2xl p-2 w-full'>Submit</button>
 
                     <div className='mt-3'>
-                        <p>Not Registered ? <Link to="/login">Go to Register</Link></p>
+                        <p>Not Registered ? <Link to="/">Go to Register</Link></p>
                     </div>
                 </form>
             </div>
