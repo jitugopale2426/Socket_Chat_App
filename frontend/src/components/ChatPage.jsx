@@ -30,19 +30,16 @@ const ChatPage = () => {
     
 
     const handleReceive =  (msg) => {
-     
-      if(msg.chatSessionId !== chatSessionId) return;
-
-      setMessages((prev)=>{
-        if(msg.senderId === user.id){
-          return prev.map((m)=>
-          m.senderId === user.id && m.text === msg.text
-        ? {...m, status:"delivered"}
-      :m)
-        }
-
-        return [...prev,{ ...msg, status:"delivered"}]
-      })
+      if (
+        msg.senderId === user.id
+      )  return;
+      
+      if(msg.chatSessionId === chatSessionId){
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      }
     };
 
     socket.on("receiveMessage",handleReceive)
@@ -121,12 +118,6 @@ const ChatPage = () => {
     })
   }
 
-  const renderTicks = (msg) =>{
-    if(msg.senderId !== user.id) return null;
-
-    return msg.status === "sent" ? "✓" : "✓✓";
-  }
-
   const handleSendMessage = () => {
     if (!newMessage.trim() || !chatSessionId) return;
 
@@ -138,7 +129,7 @@ const ChatPage = () => {
 
     socket.emit("sendMessage", msg);
 
-    setMessages((prev) => [...prev, { ...msg, id: Date.now(), createdAt: new Date(), status: "sent" }]);
+    setMessages((prev) => [...prev, { ...msg, id: Date.now(), createdAt: new Date() }]);
 
     setNewMessage("");
   };
@@ -203,9 +194,8 @@ const ChatPage = () => {
                 >
                   <span>{m.text}</span>
 
-                  <span className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+                  <span className="text-xs text-gray-600 mt-1">
                     {m.createdAt ? formatTime(m.createdAt) : ""}
-                    <span className="text-sm">{renderTicks(m)}</span>
                   </span>
                   
                 </div>
