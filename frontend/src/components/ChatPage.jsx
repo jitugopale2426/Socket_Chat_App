@@ -13,6 +13,7 @@ const ChatPage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
+  const [chatSessionId, setChatSessionId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const handleLogout = () => {
@@ -26,6 +27,32 @@ const ChatPage = () => {
   };
 
   useEffect(() => {
+    
+
+    const handleReceive =  (msg) => {
+     
+      if(msg.chatSessionId !== chatSessionId) return;
+
+      setMessages((prev)=>{
+        if(msg.senderId === user.id){
+          return prev.map((m)=>
+          m.senderId === user.id && m.text === msg.text
+        ? {...m, status:"delivered"}
+      :m)
+        }
+
+        return [...prev,{ ...msg, status:"delivered"}]
+      })
+    };
+
+    socket.on("receiveMessage",handleReceive)
+
+    return () => {
+      socket.off("receiveMessage",handleReceive);
+    };
+  }, [chatSessionId, user.id]);
+
+  useEffect(()=>{
     if (!user || !token) return;
 
     socket.auth = { token };
@@ -33,22 +60,10 @@ const ChatPage = () => {
 
     socket.emit("addUser", user.id);
 
-    socket.on("receiveMessage", (msg) => {
-      if (
-        selectedUser &&
-        (msg.senderId === selectedUser.id || msg.receiverId === selectedUser.id)
-      ) {
-        setMessages((prev) => {
-          if (prev.find((m) => m.id === msg.id)) return prev;
-          return [...prev, msg];
-        });
-      }
-    });
-
-    return () => {
+    return () =>{
       socket.disconnect();
-    };
-  }, [user, token, selectedUser]);
+    }
+  },[user,token])
 
   useEffect(() => {
     scrollToBottom();
@@ -74,12 +89,12 @@ const ChatPage = () => {
   }, [token]);
 
   useEffect(() => {
-    if (!selectedUser || !token) return;
+    if (!chatSessionId || !token) return;
 
     const fetchMessages = async () => {
       try {
         const res = await axios.get(
-          `http://localhost:5000/api/messages/getMessages/${selectedUser.id}`,
+          `http://localhost:5000/api/messages/getMessages/${chatSessionId}`,
           {
             headers: {
               "auth-token": token,
@@ -94,20 +109,36 @@ const ChatPage = () => {
     };
 
     fetchMessages();
-  }, [selectedUser, token]);
+  }, [chatSessionId, token]);
+
+  const formatTime = (dateString) =>{
+    const date = new Date(dateString);
+
+    return date.toLocaleTimeString("en-IN",{
+      hour:"numeric",
+      minute:"2-digit",
+      hour12:true
+    })
+  }
+
+  const renderTicks = (msg) =>{
+    if(msg.senderId !== user.id) return null;
+
+    return msg.status === "sent" ? "✓" : "✓✓";
+  }
 
   const handleSendMessage = () => {
-    if (!newMessage.trim() || !selectedUser) return;
+    if (!newMessage.trim() || !chatSessionId) return;
 
     const msg = {
       senderId: user.id,
-      receiverId: selectedUser.id,
+      chatSessionId,
       text: newMessage,
     };
 
     socket.emit("sendMessage", msg);
 
-    setMessages((prev) => [...prev, { ...msg, id: Date.now() }]);
+    setMessages((prev) => [...prev, { ...msg, id: Date.now(), createdAt: new Date(), status: "sent" }]);
 
     setNewMessage("");
   };
@@ -133,10 +164,24 @@ const ChatPage = () => {
                   key={u.id}
                   className={`p-3 rounded-lg cursor-pointer hover-bg-blue transition ${
                     selectedUser?.id === u.id
-                    ? "bg-blue-200 font-semibold"
-                    : "bg-white"
-                }`}
-                onClick={()=>setSelectedUser(u)}
+                      ? "bg-blue-200 font-semibold"
+                      : "bg-white"
+                  }`}
+                  onClick={async()=>{
+                    setSelectedUser(u);
+                    setMessages([]);
+                    setChatSessionId(null);
+
+                    const res = await axios.post("http://localhost:5000/api/chatSession/get-or-create",{
+                      otherUserId:u.id
+                    },{
+                      headers:{
+                        "auth-token":token
+                      }
+                    })
+
+                    setChatSessionId(res.data.id)
+                  }}
                 >
                   {u.username}
                 </div>
@@ -147,39 +192,51 @@ const ChatPage = () => {
         <div className="w-3/4 flex flex-col p-4">
           <div className="flex-1 overflow-y-auto mb-4 p-2 flex flex-col gap-2 justify-center items-center">
             {selectedUser ? (
-                messages.map((m,i) => (
-                    <div key={i} className={`p-2 rounded max-w-[60%] ${
-                        m.senderId === user?.id
-                        ? "bg-blue-300 self-end"
-                        : "bg-gray-300 self-start"
-                    }`}>{m.text}</div>
-                ))
-            ):(
-                <div className="text-gray-500 text-center text-xl">
-                    Welcome, {user?.username} ! <br/>
-                    Select a user from the left to start chatting.
+              messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`p-2 rounded max-w-[60%] flex flex-col ${
+                    m.senderId === user?.id
+                      ? "bg-blue-300 self-end items-end"
+                      : "bg-gray-300 self-start items-start"
+                  }`}
+                >
+                  <span>{m.text}</span>
+
+                  <span className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+                    {m.createdAt ? formatTime(m.createdAt) : ""}
+                    <span className="text-sm">{renderTicks(m)}</span>
+                  </span>
+                  
                 </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-center text-xl">
+                Welcome, {user?.username} ! <br />
+                Select a user from the left to start chatting.
+              </div>
             )}
-            <div ref={messagesEndRef}/>
+            <div ref={messagesEndRef} />
           </div>
 
-          {
-            selectedUser && (
-                <div className="flex mt-2">
+          {selectedUser && (
+            <div className="flex mt-2">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder={`Message to ${selectedUser.username}`}
+                className="flex-1 border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
 
-                     <input
-                     type="text"
-                     value={newMessage}
-                     onChange={(e) => setNewMessage(e.target.value)}
-                     placeholder={`Message to ${selectedUser.username}`}
-                     className="flex-1 border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"/>
-
-                     <button className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition font-semibold cursor-pointer" onClick={handleSendMessage}>
-                        Send
-                     </button>
-                </div>
-            )
-          }
+              <button
+                className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition font-semibold cursor-pointer"
+                onClick={handleSendMessage}
+              >
+                Send
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>

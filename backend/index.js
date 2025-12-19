@@ -44,15 +44,23 @@ io.on("connection",(socket)=>{
         onlineUsers.set(userId,socket.id)
     })
 
-    socket.on("sendMessage",async ({senderId, receiverId, text})=>{
+    socket.on("sendMessage",async ({senderId, chatSessionId, text})=>{
         const message = await prismaClient.message.create({
-            data:{senderId,receiverId,text}
+            data:{senderId,chatSessionId,text}
         })
 
-        const receiverSocket = onlineUsers.get(receiverId);
-        if(receiverId){
-            io.to(receiverSocket).emit("receiverMessage",message);
+        const users = await prismaClient.chatSessionUser.findMany({
+            where:{chatSessionId}
+        })
+
+        users.forEach(({userId}) =>{
+            const socketId = onlineUsers.get(userId);
+              if(socketId){
+            io.to(socketId).emit("receiveMessage",message);
         }
+        })
+
+      
     })
 
     socket.on("disconnect",()=>{

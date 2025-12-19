@@ -2,17 +2,17 @@ import { prismaClient } from "../index.js";
 
 export const sendMessageController = async(req,res)=>{
     try {
-        const {receiverId, text} = req.body;
+        const {chatSessionId, text} = req.body;
         const senderId = req.user.id;
 
-        if(!receiverId || !text){
-            return res.status(400).json({message:"both receiverId and text is required"})
+        if(!chatSessionId || !text){
+            return res.status(400).json({message:"both chatSessionId and text is required"})
         }
 
         const message = await prismaClient.message.create({
             data:{
                 senderId,
-                receiverId,
+                chatSessionId,
                 text
             }
         })
@@ -29,15 +29,11 @@ export const sendMessageController = async(req,res)=>{
 
 export const getMessagesController = async(req,res)=>{
     try {
-        const {receiverId} = req.params;
-        const senderId = req.user.id;
+        const {chatSessionId} = req.params;
 
         const messages = await prismaClient.message.findMany({
             where:{
-                OR:[
-                    {senderId,receiverId:parseInt(receiverId)},
-                    {senderId:parseInt(receiverId),receiverId:senderId}
-                ]
+               chatSessionId: Number(chatSessionId),
             },
             orderBy:{createdAt:"asc"}
         })

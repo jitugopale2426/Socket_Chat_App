@@ -14,30 +14,56 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User{
-  id Int @id @default(autoincrement())
-  username String @unique
-  email String @unique
-  password String
+model User {
+  id        Int @id @default(autoincrement())
+  username  String @unique
+  email     String @unique
+  password  String
+
+  messages  Message[]
+  sessions  ChatSessionUser[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  messagesSent Message[] @relation("SentMessages")
-  messagesReceived Message[] @relation("ReceivedMessages")
-
   @@map("users")
 }
 
-model Message{
-  id Int @id @default(autoincrement())
-  text String
-  senderId Int
-  receiverId Int
-  createdAt DateTime @default(now())
 
-  sender User @relation("SentMessages",fields: [senderId],references: [id])
-  receiver User @relation("ReceivedMessages",fields: [receiverId],references: [id])
+model Message {
+  id            Int      @id @default(autoincrement())
+  text          String
+  senderId      Int
+  chatSessionId Int
+  createdAt     DateTime @default(now())
+
+  sender        User        @relation(fields: [senderId], references: [id])
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id])
 
   @@map("messages")
+}
+
+
+model ChatSession {
+  id        Int      @id @default(autoincrement())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages  Message[]
+  users     ChatSessionUser[]
+
+  @@map("chat_sessions")
+}
+
+model ChatSessionUser {
+  id            Int @id @default(autoincrement())
+  userId        Int
+  chatSessionId Int
+
+  user          User        @relation(fields: [userId], references: [id])
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id])
+
+  @@unique([userId, chatSessionId])
+  @@map("chat_session_users")
 }
